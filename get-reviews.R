@@ -9,19 +9,10 @@ library(ggplot2)
 library(cowplot)
 })
 
-# TODO: make this read from cmd
-show.id <- 'tt1489428'  # justified
-#show.id <- 'tt0118276'  # buffy
-show.id <- 'tt1442437'  # modern family
-#show.id <- 'tt0108778'  # friends
-show.id <- 'tt0407362'  # bsg
-show.id <- 'tt0944947'  # got
-show.id <- 'tt2234222'  # orphan black
-show.id <- 'tt0805669'  # ugly betty
-
 # load show ids
 shows.dt <- fread('./show-ids.csv')
 
+# usage: ./get-reviews.R SHOW-TAG
 args <- commandArgs(trailingOnly=TRUE)
 show.show <- args[1]
 show.id <- shows.dt[J(show.show), id, on='show']
@@ -85,13 +76,22 @@ pull.title <- function(show.page) {
 }
 
 pull.episode.stats <- function(season.page, season=NA) {
+    empty.to.na <- function(x) if(is_empty(x)) NA else x
     episodes <- season.page %>% html_nodes('#episodes_content .clear .list.detail.eplist .list_item .info')
     ep.nums <- episodes %>% html_nodes('meta[itemprop="episodeNumber"]') %>% html_attr('content') %>% as.numeric
     ep.names <- episodes %>% html_nodes('strong a[itemprop="name"]') %>% html_text
     ep.airdates <- episodes %>% html_nodes('.airdate') %>% html_text %>% trimws
-    ep.ratings <- episodes %>% html_nodes('.ipl-rating-widget .ipl-rating-star.small .ipl-rating-star__rating') %>% html_text %>% as.numeric
-    ep.votes <- episodes %>% html_nodes('.ipl-rating-widget .ipl-rating-star.small .ipl-rating-star__total-votes') %>% html_text %>% str_remove_all('[(),]') %>% as.numeric
-
+    ep.ratings <- episodes %>%
+        map(~html_nodes(., '.ipl-rating-widget .ipl-rating-star.small .ipl-rating-star__rating')) %>%
+        map(html_text) %>%
+        map(empty.to.na) %>%
+        map_dbl(as.numeric)
+    ep.votes <- episodes %>%
+        map(~html_nodes(., '.ipl-rating-widget .ipl-rating-star.small .ipl-rating-star__total-votes')) %>%
+        map(html_text) %>%
+        map(~str_remove_all(., '[(),]')) %>%
+        map(empty.to.na) %>%
+        map_dbl(as.numeric)
     data.table(season=as.numeric(season), num=ep.nums, name=ep.names, airdate=ep.airdates, rating=ep.ratings, votes=ep.votes)
 }
 
@@ -163,10 +163,8 @@ show.dat <- season.pages %>% imap(pull.episode.stats) %>% rbindlist
 ############################################################
 ##### plot
 
-#for(n in show.dat$name) {
-#    print(n)
-#    print(wrap.text(n, 18, '\n  '))
-#}
+# drop empty episodes
+#show.dat <- show.dat[!is.na(rating)]
 
 #show.dat[, wrapped.title := wrap.text(name, 20, '\n  ')]
 show.dat[, wrapped.title := name %>% map(strwrap, width=20, exdent=2) %>% map(paste, collapse='\n')]
@@ -174,7 +172,7 @@ show.dat[, label := sprintf('S%dE%d\n%s', season, num, wrapped.title)]
 show.dat[, season.label := sprintf('%dx%02d', season, num)]
 #show.dat[, title.label := sprintf('S%dE%d\n%s', season, num, wrapped.title)]
 show.dat[, rating.label := sprintf('%0.1f', rating)]
-show.dat[, rating.rank := frank(rating, ties.method='dense')]
+show.dat[, rating.rank := frank(rating, ties.method='dense', na.last='keep')]
 show.dat[, `:=`(sl=season-0.5, sr=season+0.5, nt=num-0.5, nb=num+0.5)]
 
 show.dat <- show.dat[num >= 1]
@@ -197,7 +195,7 @@ ggp <- ggplot(show.dat, aes(season, y=num, fill=rating.rank, label=label)) +
     geom_text(aes(x=sl+lbar, y=nt, label=wrapped.title), hjust=0, vjust=1, nudge_x=text.nudge.x, nudge_y=text.nudge.y-0.25, lineheight=0.9, size=0.75*text.size) +
     geom_text(aes(x=sr, y=nt, label=rating.label), hjust=1, vjust=1, nudge_x=-text.nudge.x, nudge_y=text.nudge.y, lineheight=0.9, size=text.size) +
     scale_y_reverse() +
-    scale_fill_distiller(type='seq', direction=1, palette='PuBu', values=c(0,1)) +
+    scale_fill_distiller(type='seq', direction=1, palette='Blues', values=c(0,1)) +
     guides(fill=FALSE) +
     #labs(title=show.title) +
     NULL
@@ -208,12 +206,7 @@ ggp.title <- ggdraw() +
     NULL
 ggp.combined <- plot_grid(ggp.title, ggp, ncol=1, rel_heights=c(1, neps))
 
-#plot.new()
-#0.75*strwidth('  Never Yet Been Done', cex=11/12, units='inch')
-#dev.off()
-
 ggsave(sprintf('plots/%s-%s.png', show.show, show.id), ggp.combined, height=0.5+neps*0.5, width=nseason*1)
-#print(ggp)
 
 
 
