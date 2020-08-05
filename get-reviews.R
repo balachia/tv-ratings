@@ -1,20 +1,31 @@
 #!/usr/bin/env Rscript
 suppressMessages({
-library(rvest)
-library(purrr)
-library(lubridate)
-library(stringr)
-library(data.table)
-library(ggplot2)
-library(cowplot)
+    library(optparse)
+    library(rvest)
+    library(purrr)
+    library(lubridate)
+    library(stringr)
+    library(data.table)
+    library(ggplot2)
+    library(cowplot)
 })
 
 # load show ids
 shows.dt <- fread('./show-ids.csv')
 
+option.list <- list(
+    make_option(c('-r', '--reload'), action='store_true', default=FALSE),
+    make_option(c('-s', '--stable'), action='store_true', default=FALSE),
+    make_option(c('-m', '--mini'), action='store_true', default=FALSE)
+    )
+parser <- OptionParser(option_list=option.list)
+arguments <- parse_args(parser, positional_arguments = 1)
+opts <- arguments$options
+show.show <- arguments$args
+
 # usage: ./get-reviews.R SHOW-TAG
-args <- commandArgs(trailingOnly=TRUE)
-show.show <- args[1]
+#args <- commandArgs(trailingOnly=TRUE)
+#show.show <- args[1]
 show.id <- shows.dt[J(show.show), id, on='show']
 
 if(is.na(show.id)) {
@@ -24,6 +35,8 @@ if(is.na(show.id)) {
 imdb.base <- 'http://www.imdb.com%s'
 title.base <- 'http://www.imdb.com/title/%s/'
 episode.base <- 'http://www.imdb.com/title/%s/episodes?season=%d'
+local.title.base <- './htmls/%s.html'
+local.episode.base <- './htmls/%s.%d.html'
 
 # download helpers
 download.show <- function(url, verbose=TRUE) {
@@ -140,8 +153,14 @@ wrap.text <- function(x, n=10, split='\n    ') {
 
 # TODO: be verbose about what we're downloading
 
-# get show page
-title.page <- sprintf(title.base, show.id) %>% download.show
+# try local title page
+title.local <- sprintf(local.title.base, show.id)
+must.dl <- opts$reload || (!file.exists(title.local))
+title.url <- if(must.dl) sprintf(title.base, show.id) else title.local
+
+# get show page, and save if needed
+title.page <- title.url %>% download.show
+res <- if(must.dl) { write_html(title.page, title.local) }
 
 # get title
 show.title <- title.page %>% pull.title()
@@ -149,10 +168,14 @@ cat('\t', show.title, '\n', sep='')
 
 # get season pages
 max.season <- title.page %>% pull.max.season()
-season.page.urls <- sprintf(episode.base, show.id, 1:max.season)
+# try local season pages
+seasons.local <- sprintf(local.episode.base, show.id, 1:max.season)
+must.dl.eps <- opts$reload || (!all(file.exists(seasons.local)))
+season.page.urls <- if(must.dl.eps) sprintf(episode.base, show.id, 1:max.season) else seasons.local
 
 cat(sprintf('%d season%s, downloading ', max.season, if(max.season==1) '' else 's'))
 season.pages <- season.page.urls %>% imap(download.season)
+res <- if(must.dl.eps) { map2(season.pages, seasons.local, ~ write_html(.x, .y)) }
 cat('\n')
 
 # get season pages
@@ -175,17 +198,43 @@ show.dat[, rating.label := sprintf('%0.1f', rating)]
 show.dat[, rating.rank := frank(rating, ties.method='dense', na.last='keep')]
 show.dat[, `:=`(sl=season-0.5, sr=season+0.5, nt=num-0.5, nb=num+0.5)]
 
+show.dat[, season.nna := sum(!is.na(rating)), by=season]
+
+# drop empty seasons, and episode 0s
 show.dat <- show.dat[num >= 1]
+show.dat <- show.dat[season.nna > 0]
 
 nseason <- show.dat[, max(season)]
 neps <- show.dat[, max(num)]
+
+# wrapped show title
+show.title.wrapped <- strwrap(show.title, 10*nseason) %>% paste0(collapse='\n')
+#print(show.title)
+#print(show.title.wrapped)
+
+# global rating ('stable') vs rank visualization
+if(opts$stable) {
+    # set rating variable
+    #fill.var <- if(opts$stable) as.name('rating') else as.name('rating.rank')
+    fill.var <- as.name('rating')
+    #fill.palette <- 'RdBu'
+    fill.palette <- 'RdYlBu'
+    # midpoint at 6.5 ~ global mean/median rating
+    fill.values <- c(0, ( (6.5-1) / (10-1) ), 1)
+    fill.limits <- c(1,10)
+} else {
+    fill.var <- as.name('rating.rank')
+    fill.palette <- 'Blues'
+    fill.values <- c(0,1)
+    fill.limits <- NULL
+}
 
 lbar <- 0.1
 rect.border.size <- 0.5
 text.nudge.x <- 0.02
 text.nudge.y <- -0.05
 text.size <- 3
-ggp <- ggplot(show.dat, aes(season, y=num, fill=rating.rank, label=label)) +
+ggp <- ggplot(show.dat, aes_(~season, y=~num, fill=fill.var)) +
     theme_void() +
     coord_cartesian(expand=FALSE) +
     geom_rect(aes(xmin=sl, xmax=sl+lbar, ymin=nt, ymax=nb), color='white', size=0) +
@@ -195,13 +244,21 @@ ggp <- ggplot(show.dat, aes(season, y=num, fill=rating.rank, label=label)) +
     geom_text(aes(x=sl+lbar, y=nt, label=wrapped.title), hjust=0, vjust=1, nudge_x=text.nudge.x, nudge_y=text.nudge.y-0.25, lineheight=0.9, size=0.75*text.size) +
     geom_text(aes(x=sr, y=nt, label=rating.label), hjust=1, vjust=1, nudge_x=-text.nudge.x, nudge_y=text.nudge.y, lineheight=0.9, size=text.size) +
     scale_y_reverse() +
-    scale_fill_distiller(type='seq', direction=1, palette='Blues', values=c(0,1)) +
+    scale_fill_distiller(type='seq', direction=1, palette=fill.palette, values=fill.values, limits=fill.limits) +
+    #scale_fill_distiller(type='seq', direction=1, palette='Blues', values=c(0,1)) +
     guides(fill=FALSE) +
     #labs(title=show.title) +
     NULL
 
+#if(opts$stable) {
+#    # midpoint at 6.5 ~ global mean/median rating
+#    ggp <- ggp + scale_fill_distiller(type='seq', direction=1, palette='RdBu', values=c(0, ((6.5-1)/9), 1), limits=c(1,10))
+#} else {
+#    ggp <- ggp + scale_fill_distiller(type='seq', direction=1, palette='Blues', values=c(0,1))
+#}
+
 ggp.title <- ggdraw() +
-    draw_label(show.title, fontface='bold', x=0, hjust=0) +
+    draw_label(show.title.wrapped, fontface='bold', x=0, hjust=0) +
     theme(plot.margin=margin(0, 0, 0, 0.5, 'cm')) +
     NULL
 ggp.combined <- plot_grid(ggp.title, ggp, ncol=1, rel_heights=c(1, neps))
@@ -209,5 +266,20 @@ ggp.combined <- plot_grid(ggp.title, ggp, ncol=1, rel_heights=c(1, neps))
 ggsave(sprintf('plots/%s-%s.png', show.show, show.id), ggp.combined, height=0.5+neps*0.5, width=nseason*1)
 
 
+# mini
+if(opts$mini) {
+    lbar <- 0.1
+    mini.rect.border.size <- 0.25
+    ggp.mini <- ggplot(show.dat, aes_(~season, y=~num, fill=fill.var)) +
+        theme_void() +
+        coord_cartesian(expand=FALSE) +
+        #geom_rect(aes(xmin=sl, xmax=sl+lbar, ymin=nt, ymax=nb), color='white', size=0) +
+        geom_rect(aes(xmin=sl, xmax=sr, ymin=nt, ymax=nb), color='white', size=mini.rect.border.size) +
+        scale_y_reverse() +
+        scale_fill_distiller(type='seq', direction=1, palette=fill.palette, values=fill.values, limits=fill.limits) +
+        guides(fill=FALSE) +
+        NULL
+    ggsave(sprintf('minis/%s-%s.png', show.show, show.id), ggp.mini, height=neps*0.25, width=nseason*0.25, units='cm')
+}
 
 
