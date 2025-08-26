@@ -4,6 +4,7 @@ suppressMessages({
     library(rvest)
     library(optparse)
     library(data.table)
+    library(stringr)
 })
 
 option.list <- list(
@@ -41,34 +42,82 @@ cat(sprintf('%s "%s" from: %s\n', if(opts$replace) 'replacing' else 'adding', ad
 #    stop('usage: get-id.R [add|search] query terms')
 #}
 
-#query <- 'avatar airbender'
+pretty.print.result <- function(x, id = NULL) {
+    # url <- x |>
+    #     html_nodes('a') |>
+    #     html_attr('href') |> 
+    #     substring(8, 16)
+    url <- x |>
+        html_nodes('a') |>
+        html_attr('href') |>
+        str_match('/title/(tt\\d+)/')
+    url <- url[, 2]
+    title <- x |>
+        html_nodes('a') |>
+        html_text()
+    details <- x |>
+        html_nodes('ul') |>
+        (`[[`)(1) |>
+        html_nodes('li') |> 
+        sapply(html_text)
+    if(!is.null(title)) title <- paste0(id, ') ', title)
+    cat(sprintf('%s\n\t%s\n\t%s\n',
+                title,
+                paste(details, collapse = ' -- '),
+                sprintf(url.base, url)
+                ))
+}
 
-search.base <- 'https://www.imdb.com/find?s=tt&q=%s'
+#query <- 'avatar airbender'
+# query <- 'avatar airbender' |> build.query()
+
+# search.base <- 'https://www.imdb.com/find?s=tt&q=%s'
+# url.base <- 'https://www.imdb.com/title/%s'
+
+search.base <- 'https://www.imdb.com/find/?q=%s'
 url.base <- 'https://www.imdb.com/title/%s'
 
 # get page
 search.page <- read_html(sprintf(search.base, query))
 
 # results table
+# search.texts <- search.page %>%
+#     html_nodes('.ipc-metadata-list-summary-item__c') %>%
+#     html_text()
 search.texts <- search.page %>%
-    html_nodes('.findList .result_text') %>%
-    html_text()
+    html_nodes('.ipc-metadata-list-summary-item__tc')
+search.texts <- search.page %>%
+    html_nodes('.ipc-metadata-list-summary-item__tc') |>
+    (function(.) mapply(FUN = pretty.print.result, x = ., id = seq_along(.)))()
 search.links <- search.page %>%
-    html_nodes('.findList td.result_text>a') %>%
+    html_nodes('.ipc-metadata-list-summary-item__t') %>%
+    # html_nodes('.findList td.result_text>a') %>%
     html_attr('href') %>%
-    substring(8, 16)
-show.id <- search.links[1]
-
-ep.url <- sprintf(url.base, show.id)
-cat(sprintf('%s\n%s\n', search.texts[1], ep.url))
+    str_match('/title/(tt\\d+)/')
+search.links <- search.links[, 2]
+# show.id <- search.links[1]
 
 # confirm add
+result.select <- 1
 if(!opts$noconfirm) {
-    cat('correct? [Yn]')
-    confirmed <- readLines(con='stdin', n=1) %>%
-        grepl('(^$)|(^[Yy])', .)
-    if(!confirmed) { quit() }
+    # cat('correct? [Yn]')
+    # confirmed <- readLines(con='stdin', n=1) %>%
+    #     grepl('(^$)|(^[Yy])', .)
+    # if(!confirmed) { quit() }
+    cat('choice: ')
+    selected <- readLines(con='stdin', n=1) |>
+        as.integer()
+    if(selected %in% seq_along(search.links)) {
+        result.select <- selected
+    } else {
+        quit()
+    }
 }
+show.id <- search.links[result.select]
+
+ep.url <- sprintf(url.base, show.id)
+# cat(sprintf('%s\n%s\n', search.texts[1], ep.url))
+cat(sprintf('\n%s\n', ep.url))
 
 # try to add
 # is show or id in database already?
