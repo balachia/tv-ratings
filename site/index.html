@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TV Ratings Explorer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="top-bar">
+    <h2>TV Ratings Explorer</h2>
+    <button id="btn-theme" class="btn-theme"></button>
+  </div>
+
+  <div class="search-wrapper">
+    <input id="search-input" type="text" placeholder="Loading..."
+           oninput="searchDebounce(this.value)" disabled>
+    <button id="btn-clear" class="btn-clear" type="button" onclick="clearSearch()">&times;</button>
+  </div>
+
+  <div id="search-results" class="search-results-container"></div>
+
+  <div id="detail-view" class="detail-container" style="display:none;">
+    <div class="detail-header">
+      <button id="btn-back">&larr; Back</button>
+      <h3 id="detail-title"></h3>
+      <div class="toggle-group">
+        <button id="btn-absolute" class="btn active">Absolute</button>
+        <button id="btn-relative" class="btn">Relative</button>
+        <button id="btn-export" class="btn">&#8913; Export</button>
+      </div>
+    </div>
+    <div id="heatmap-container" class="heatmap-container"></div>
+    <div id="tooltip" class="heatmap-tooltip" style="display:none;"></div>
+  </div>
+
+  <script src="sparkline.js"></script>
+  <script src="heatmap.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
