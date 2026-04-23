@@ -286,6 +286,14 @@ document.addEventListener("DOMContentLoaded", function() {
   // keyboard nav in search
   document.getElementById("search-input").addEventListener("keydown", handleSearchKeydown);
 
+  // "/" to focus search
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "/" && document.activeElement !== document.getElementById("search-input")) {
+      e.preventDefault();
+      goBack();
+    }
+  });
+
   // browser back/forward
   window.addEventListener("popstate", function() {
     var id = getShowFromURL();
