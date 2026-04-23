@@ -54,7 +54,7 @@ cat(sprintf("%s rows\n", format(nrow(ratings), big.mark=",")))
 cat("Loading basics... ")
 basics <- fread(
     cmd = sprintf("gunzip -c %s", file.path(dataset.dir, dataset.files$basics)),
-    select = c("tconst", "primaryTitle", "startYear"),
+    select = c("tconst", "primaryTitle", "originalTitle", "startYear"),
     na.strings = "\\N",
     quote = ""
 )
@@ -75,14 +75,14 @@ dat <- basics[dat, on="tconst"]
 setnames(dat, c("primaryTitle", "startYear"), c("title", "year"))
 dat[, year := as.integer(year)]
 
-# join show titles (don't need year for the parent show here)
+# join show titles + original title
 show.titles <- basics[dat[, .(parentTconst = unique(parentTconst))], on=c(tconst="parentTconst")]
-setnames(show.titles, c("tconst", "primaryTitle"), c("parentTconst", "showTitle"))
+setnames(show.titles, c("tconst", "primaryTitle", "originalTitle"), c("parentTconst", "showTitle", "showOrigTitle"))
 show.titles[, startYear := NULL]
 dat <- show.titles[dat, on="parentTconst"]
 
 # clean up columns
-dat <- dat[, .(parentTconst, tconst, showTitle, season=seasonNumber, episode=episodeNumber,
+dat <- dat[, .(parentTconst, tconst, showTitle, showOrigTitle, season=seasonNumber, episode=episodeNumber,
                title, year, rating=averageRating, votes=numVotes)]
 
 cat(sprintf("done: %s episodes across %s shows\n",

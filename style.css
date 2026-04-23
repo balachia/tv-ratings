@@ -100,6 +100,12 @@ html.dark .btn-clear:hover { color: #e0e0e0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.search-result-orig {
+  font-weight: 400;
+  font-size: 13px;
+  color: #6c757d;
+  margin-left: 6px;
+}
 .search-result-meta {
   font-size: 12px;
   color: #6c757d;
@@ -135,6 +141,12 @@ html.dark .btn-clear:hover { color: #e0e0e0; }
 }
 .title-link:hover {
   text-decoration: underline;
+}
+.orig-title {
+  font-size: 14px;
+  font-weight: 400;
+  color: #6c757d;
+  margin-left: 8px;
 }
 #btn-back {
   background: none;

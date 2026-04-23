@@ -15,10 +15,10 @@ opts <- parse_args(parser)
 ############################################################
 ##### ensure RDS exists
 
-rds.path <- "../app/data/episodes.rds"
+rds.path <- "app/data/episodes.rds"
+if (!file.exists(rds.path)) rds.path <- "../app/data/episodes.rds"
 if (!file.exists(rds.path)) {
-    cat("RDS not found, running app/preprocess.R first...\n")
-    system2("Rscript", c("../app/preprocess.R", if(opts$reload) "-r" else ""))
+    stop("episodes.rds not found. Run app/preprocess.R first.")
 }
 
 cat("Loading data... ")
@@ -41,6 +41,7 @@ cat(sprintf("Global median: %.1f\n", GLOBAL_MEDIAN))
 cat("Building show index... ")
 show_index <- episodes[order(season, episode), .(
     t  = showTitle[1],
+    ot = showOrigTitle[1],
     n  = .N,
     r  = round(mean(rating, na.rm=TRUE), 1),
     v  = sum(votes, na.rm=TRUE),
@@ -49,6 +50,9 @@ show_index <- episodes[order(season, episode), .(
     rs = list(rating),
     sb = list(which(diff(season) != 0))
 ), by=.(i = parentTconst)]
+
+# drop ot if same as t (saves space — most shows are English)
+show_index[ot == t, ot := NA_character_]
 
 show_index[is.infinite(y1), `:=`(y1=NA_integer_, y2=NA_integer_)]
 setorder(show_index, -v)
@@ -98,6 +102,7 @@ shows_json <- list(
         list(
             i  = row$i,
             t  = row$t,
+            ot = row$ot,
             n  = row$n,
             r  = row$r,
             v  = row$v,

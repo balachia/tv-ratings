@@ -25,6 +25,9 @@ function loadData() {
       showIndex = data.shows;
       for (var i = 0; i < showIndex.length; i++) {
         showIndex[i]._titleLower = showIndex[i].t.toLowerCase();
+        if (showIndex[i].ot) {
+          showIndex[i]._otLower = showIndex[i].ot.toLowerCase();
+        }
         showLookup[showIndex[i].i] = showIndex[i];
       }
 
@@ -130,7 +133,8 @@ function performSearch(query) {
   }
   var q = query.trim().toLowerCase();
   var matches = showIndex.filter(function(s) {
-    return s._titleLower.indexOf(q) !== -1;
+    return s._titleLower.indexOf(q) !== -1 ||
+           (s._otLower && s._otLower.indexOf(q) !== -1);
   });
   matches.sort(function(a, b) { return b.v - a.v; });
   matches = matches.slice(0, 10);
@@ -193,8 +197,9 @@ function renderSearchResults(matches) {
         ? " (" + s.y1 + ")"
         : " (" + s.y1 + "\u2013" + s.y2 + ")";
     }
+    var otStr = s.ot ? ' <span class="search-result-orig">' + escapeHtml(s.ot) + '</span>' : "";
     info.innerHTML =
-      '<div class="search-result-title">' + escapeHtml(s.t) + yearStr + "</div>" +
+      '<div class="search-result-title">' + escapeHtml(s.t) + yearStr + otStr + "</div>" +
       '<div class="search-result-meta">' +
         s.n + " eps &middot; " + s.r + " avg" +
       "</div>";
@@ -237,8 +242,9 @@ function selectShow(id) {
     var title = show ? show.t : "Unknown";
 
     var titleEl = document.getElementById("detail-title");
+    var origTitle = show && show.ot ? ' <span class="orig-title">' + escapeHtml(show.ot) + '</span>' : "";
     titleEl.innerHTML = '<a href="https://www.imdb.com/title/' + id + '/" target="_blank" class="title-link">' +
-      escapeHtml(title) + '</a>' + yearRange;
+      escapeHtml(title) + '</a>' + yearRange + origTitle;
     document.getElementById("detail-view").style.display = "block";
     document.getElementById("search-results").style.display = "none";
 
