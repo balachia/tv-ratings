@@ -30,10 +30,17 @@ function loadData() {
 
       input.placeholder = "Search for a TV show...";
       input.disabled = false;
-      input.focus();
 
       // preload tier 0
       loadTier(0);
+
+      // check URL for deep link
+      var linked = getShowFromURL();
+      if (linked && showLookup[linked]) {
+        selectShow(linked);
+      } else {
+        input.focus();
+      }
     });
 }
 
@@ -60,7 +67,6 @@ function getEpisodes(showId) {
     var col = loadedTiers[tier][showId];
     if (!col) return null;
 
-    // expand columnar to row format
     var episodes = [];
     for (var i = 0; i < col.s.length; i++) {
       episodes.push({
@@ -77,9 +83,29 @@ function getEpisodes(showId) {
   });
 }
 
+// ---- URL routing ----
+
+function getShowFromURL() {
+  var hash = window.location.hash;
+  if (hash && hash.length > 1) {
+    return hash.substring(1); // #tt0903747 -> tt0903747
+  }
+  return null;
+}
+
+function setURLForShow(id) {
+  history.pushState(null, "", "#" + id);
+}
+
+function clearURL() {
+  history.pushState(null, "", window.location.pathname);
+}
+
 // ---- search ----
 
 var _searchTimer = null;
+var _selectedIndex = -1;
+var _currentMatches = [];
 
 function searchDebounce(val) {
   clearTimeout(_searchTimer);
@@ -96,7 +122,9 @@ function clearSearch() {
 }
 
 function performSearch(query) {
+  _selectedIndex = -1;
   if (!query || query.trim().length < 2) {
+    _currentMatches = [];
     renderSearchResults([]);
     return;
   }
@@ -106,7 +134,41 @@ function performSearch(query) {
   });
   matches.sort(function(a, b) { return b.v - a.v; });
   matches = matches.slice(0, 10);
+  _currentMatches = matches;
   renderSearchResults(matches);
+}
+
+function handleSearchKeydown(e) {
+  var rows = document.querySelectorAll(".search-result-row");
+  if (rows.length === 0) return;
+
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    _selectedIndex = Math.min(_selectedIndex + 1, rows.length - 1);
+    updateSelectedRow(rows);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    _selectedIndex = Math.max(_selectedIndex - 1, -1);
+    updateSelectedRow(rows);
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (_selectedIndex >= 0 && _selectedIndex < _currentMatches.length) {
+      selectShow(_currentMatches[_selectedIndex].i);
+    } else if (_currentMatches.length > 0) {
+      selectShow(_currentMatches[0].i);
+    }
+  } else if (e.key === "Escape") {
+    clearSearch();
+  }
+}
+
+function updateSelectedRow(rows) {
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.toggle("search-result-selected", i === _selectedIndex);
+  }
+  if (_selectedIndex >= 0 && rows[_selectedIndex]) {
+    rows[_selectedIndex].scrollIntoView({ block: "nearest" });
+  }
 }
 
 function renderSearchResults(matches) {
@@ -119,7 +181,7 @@ function renderSearchResults(matches) {
   }
   container.style.display = "block";
 
-  matches.forEach(function(s) {
+  matches.forEach(function(s, idx) {
     var row = document.createElement("div");
     row.className = "search-result-row";
 
@@ -156,6 +218,8 @@ function renderSearchResults(matches) {
 // ---- show detail ----
 
 function selectShow(id) {
+  setURLForShow(id);
+
   getEpisodes(id).then(function(episodes) {
     if (!episodes) return;
 
@@ -184,6 +248,15 @@ function selectShow(id) {
   });
 }
 
+function goBack() {
+  clearURL();
+  document.getElementById("detail-view").style.display = "none";
+  var oldMini = document.getElementById("mini-view-wrapper");
+  if (oldMini) oldMini.remove();
+  document.getElementById("search-results").style.display = "block";
+  document.getElementById("search-input").focus();
+}
+
 function computeRatingRank(episodes) {
   var rated = [];
   for (var i = 0; i < episodes.length; i++) {
@@ -209,4 +282,19 @@ function computeRatingRank(episodes) {
 
 // ---- init ----
 
-document.addEventListener("DOMContentLoaded", loadData);
+document.addEventListener("DOMContentLoaded", function() {
+  // keyboard nav in search
+  document.getElementById("search-input").addEventListener("keydown", handleSearchKeydown);
+
+  // browser back/forward
+  window.addEventListener("popstate", function() {
+    var id = getShowFromURL();
+    if (id && showLookup[id]) {
+      selectShow(id);
+    } else {
+      goBack();
+    }
+  });
+
+  loadData();
+});

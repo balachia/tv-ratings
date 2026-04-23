@@ -507,11 +507,5 @@ document.addEventListener("DOMContentLoaded", function() {
   document.getElementById("btn-absolute").addEventListener("click", function() { recolor("absolute"); });
   document.getElementById("btn-relative").addEventListener("click", function() { recolor("relative"); });
   document.getElementById("btn-export").addEventListener("click", exportImage);
-  document.getElementById("btn-back").addEventListener("click", function() {
-    document.getElementById("detail-view").style.display = "none";
-    var oldMini = document.getElementById("mini-view-wrapper");
-    if (oldMini) oldMini.remove();
-    document.getElementById("search-results").style.display = "block";
-    document.getElementById("search-input").focus();
-  });
+  document.getElementById("btn-back").addEventListener("click", goBack);
 });
