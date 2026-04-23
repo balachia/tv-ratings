@@ -1,0 +1,10 @@
+name: tv-ratings
+title:
+username: balachia
+account: balachia
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17172410
+bundleId: 11873879
+url: https://balachia.shinyapps.io/tv-ratings/
+version: 1
