@@ -236,7 +236,9 @@ function selectShow(id) {
     var show = showLookup[id];
     var title = show ? show.t : "Unknown";
 
-    document.getElementById("detail-title").textContent = title + yearRange;
+    var titleEl = document.getElementById("detail-title");
+    titleEl.innerHTML = '<a href="https://www.imdb.com/title/' + id + '/" target="_blank" class="title-link">' +
+      escapeHtml(title) + '</a>' + yearRange;
     document.getElementById("detail-view").style.display = "block";
     document.getElementById("search-results").style.display = "none";
 

@@ -129,6 +129,13 @@ html.dark .btn-clear:hover { color: #e0e0e0; }
   margin: 0;
   flex: 1;
 }
+.title-link {
+  color: inherit;
+  text-decoration: none;
+}
+.title-link:hover {
+  text-decoration: underline;
+}
 #btn-back {
   background: none;
   border: 1px solid #ced4da;
