@@ -143,4 +143,56 @@ for (tier_num in sort(unique(show_index$tier))) {
         length(ids), file.size(fname) / 1000))
 }
 
+############################################################
+##### write locale files from title.akas
+
+datasets.dir <- "datasets"
+if (!dir.exists(datasets.dir)) datasets.dir <- "../datasets"
+akas.gz <- file.path(datasets.dir, "title.akas.tsv.gz")
+
+if (file.exists(akas.gz)) {
+    cat("Generating locale files...\n")
+
+    # fast filter with python
+    ids_file <- tempfile()
+    writeLines(show_index$i, ids_file)
+    filtered_file <- tempfile(fileext=".tsv")
+    system2("python3", c("-c", shQuote(sprintf(
+        "import gzip\nids=set(open('%s').read().strip().split('\\n'))\nwith gzip.open('%s','rt',encoding='utf-8',errors='replace') as f:\n h=f.readline()\n with open('%s','w') as o:\n  o.write(h.replace('\\x00',''))\n  [o.write(l.replace('\\x00','')) for l in f if l.split('\\t',1)[0] in ids]",
+        ids_file, akas.gz, filtered_file))))
+
+    # strip NULs and read
+    clean_file <- tempfile(fileext=".tsv")
+    system2("tr", c("-d", r"('\0')"), stdin=filtered_file, stdout=clean_file)
+    sa <- fread(clean_file, na.strings=r"(\N)", quote="", fill=TRUE)
+    unlink(c(ids_file, filtered_file, clean_file))
+
+    # non-ASCII titles that differ from primary
+    na_rows <- sa[!is.na(title) & title != "" & grepl("[^[:ascii:]]", title, perl=TRUE)]
+    primary <- unique(episodes[, .(parentTconst, showTitle)])
+    na_rows <- primary[na_rows, on=c(parentTconst="titleId")]
+    na_rows <- na_rows[tolower(title) != tolower(showTitle)]
+
+    # region -> locale
+    r2l <- c(RU="ru", JP="ja", KR="ko", CN="zh", TW="zh",
+             DE="de", FR="fr", UA="uk", BG="bg", GR="el",
+             IL="he", IN="hi", IR="fa", TR="tr", HU="hu",
+             CZ="cs", PL="pl", TH="th", VN="vi", BR="pt",
+             SA="ar", AE="ar", EG="ar", RS="sr", HR="hr",
+             RO="ro", SE="sv", FI="fi", DK="da", NO="nb")
+    na_rows[, locale := r2l[region]]
+    na_rows <- na_rows[!is.na(locale)]
+
+    dir.create("data/locale", showWarnings=FALSE)
+    for (loc in unique(na_rows$locale)) {
+        best <- na_rows[locale == loc, .(title = title[which.min(nchar(title))]), by=parentTconst]
+        out <- setNames(as.list(best$title), best$parentTconst)
+        fname <- sprintf("data/locale/%s.json", loc)
+        write(toJSON(out, auto_unbox=TRUE), fname)
+        cat(sprintf("  %s: %5d shows, %4.0f KB\n", loc, nrow(best), file.size(fname)/1000))
+    }
+} else {
+    cat("Skipping locales (title.akas.tsv.gz not found)\n")
+}
+
 cat("Done.\n")

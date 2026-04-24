@@ -37,6 +37,9 @@ function loadData() {
       // preload tier 0
       loadTier(0);
 
+      // load locale-specific search titles
+      loadLocale();
+
       // check URL for deep link
       var linked = getShowFromURL();
       if (linked && showLookup[linked]) {
@@ -104,6 +107,32 @@ function clearURL() {
   history.pushState(null, "", window.location.pathname);
 }
 
+// ---- locale ----
+
+function loadLocale() {
+  // detect browser language: "ru", "ja-JP" -> "ru", "ja"
+  var lang = (navigator.language || "").split("-")[0].toLowerCase();
+  if (!lang || lang === "en") return;
+
+  fetch("data/locale/" + lang + ".json")
+    .then(function(r) {
+      if (!r.ok) return null;
+      return r.json();
+    })
+    .then(function(localeData) {
+      if (!localeData) return;
+      // merge locale titles into search index
+      for (var i = 0; i < showIndex.length; i++) {
+        var localTitle = localeData[showIndex[i].i];
+        if (localTitle) {
+          showIndex[i]._localeLower = localTitle.toLowerCase();
+          showIndex[i]._locale = localTitle;
+        }
+      }
+    })
+    .catch(function() {}); // locale file doesn't exist for this language, ignore
+}
+
 // ---- search ----
 
 var _searchTimer = null;
@@ -134,7 +163,8 @@ function performSearch(query) {
   var q = query.trim().toLowerCase();
   var matches = showIndex.filter(function(s) {
     return s._titleLower.indexOf(q) !== -1 ||
-           (s._otLower && s._otLower.indexOf(q) !== -1);
+           (s._otLower && s._otLower.indexOf(q) !== -1) ||
+           (s._localeLower && s._localeLower.indexOf(q) !== -1);
   });
   matches.sort(function(a, b) { return b.v - a.v; });
   matches = matches.slice(0, 10);
@@ -197,7 +227,8 @@ function renderSearchResults(matches) {
         ? " (" + s.y1 + ")"
         : " (" + s.y1 + "\u2013" + s.y2 + ")";
     }
-    var otStr = s.ot ? ' <span class="search-result-orig">' + escapeHtml(s.ot) + '</span>' : "";
+    var altTitle = s._locale || s.ot;
+    var otStr = altTitle ? ' <span class="search-result-orig">' + escapeHtml(altTitle) + '</span>' : "";
     info.innerHTML =
       '<div class="search-result-title">' + escapeHtml(s.t) + yearStr + otStr + "</div>" +
       '<div class="search-result-meta">' +
@@ -242,7 +273,8 @@ function selectShow(id) {
     var title = show ? show.t : "Unknown";
 
     var titleEl = document.getElementById("detail-title");
-    var origTitle = show && show.ot ? ' <span class="orig-title">' + escapeHtml(show.ot) + '</span>' : "";
+    var altTitle = (show && show._locale) || (show && show.ot);
+    var origTitle = altTitle ? ' <span class="orig-title">' + escapeHtml(altTitle) + '</span>' : "";
     titleEl.innerHTML = '<a href="https://www.imdb.com/title/' + id + '/" target="_blank" class="title-link">' +
       escapeHtml(title) + '</a>' + yearRange + origTitle;
     document.getElementById("detail-view").style.display = "block";
